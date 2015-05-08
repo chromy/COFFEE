@@ -125,7 +125,7 @@ class ASTKernel(object):
 
         plan_gpu modifies its AST such that the resulting output code is ::
 
-            void foo(int A[1], int i) {
+            __device__ void foo(int A[1], int i) {
               A[0] = B[i];
             }
         """
@@ -163,6 +163,34 @@ class ASTKernel(object):
         if hasattr(self, 'fundecl'):
             self.fundecl.pred = [q for q in self.fundecl.pred
                                  if q not in ['static', 'inline']]
+            
+        # Mark constant arrays as such and hoist them out of the function.
+        for decl in decls.values():
+            d, place = decl
+            if d not in self.fundecl.args and not d.is_scaler:
+                d.qual = ['__constant__'] + d.qual
+                self._gpu_hoist_constants(self.ast, [d])
+
+        # Mark functions as callable from a CUDA threads.
+        if hasattr(self, 'fundecl'):
+            self.fundecl.pred = [q for q in self.fundecl.pred
+                                 if q not in ['static', 'inline']]
+            self.fundecl.pred.insert(0, '__device__')
+            #import IPython; IPython.embed()
+            #for arg in self.fundecl.args:
+            #    if not arg.is_scaler:
+            #        arg.attr.insert(0, '__restrict__')
+
+
+    def _gpu_hoist_constants(self, ast, decls):
+        def visit(node):
+            if not hasattr(node, 'children'):
+                return
+            node.children = [c for c in node.children if c not in decls]
+            for c in node.children:
+                visit(c)
+        visit(ast)
+        ast.children = decls + ast.children
 
     def plan_cpu(self, opts):
         """Transform and optimize the kernel suitably for CPU execution."""
@@ -423,6 +451,7 @@ class ASTKernel(object):
     def gencode(self):
         """Generate a string representation of the AST."""
         return self.ast.gencode()
+
 
 # These global variables capture the internal state of COFFEE
 intrinsics = {}

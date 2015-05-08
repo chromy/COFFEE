@@ -563,6 +563,11 @@ class Decl(Statement, Perfect):
         """Return True if the declaration is a constant."""
         return 'const' in self.qual
 
+    @property
+    def is_scaler(self):
+        """Return True if the declaration is a scalar."""
+        return self.size == (0,)
+
     def gencode(self, not_scope=False):
         if isinstance(self.init, EmptyStatement):
             return decl(spacer(self.qual), self.typ, self.sym.gencode(),
